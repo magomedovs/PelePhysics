@@ -16,6 +16,8 @@ CEXE_sources += SprayJet.cpp
 CEXE_sources += SprayIO.cpp
 
 CEXE_headers += Drag.H
+CEXE_headers += SprayRates.H SprayCvode.H
+CEXE_sources += SprayCvode.cpp
 CEXE_headers += WallFunctions.H
 
 VPATH_LOCATIONS += $(PELE_PHYSICS_HOME)/Source/Spray

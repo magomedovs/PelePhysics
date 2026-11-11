@@ -1,6 +1,7 @@
 
 #include "SprayParticles.H"
 #include "Drag.H"
+#include "SprayCvode.H"
 #include "SprayInterpolation.H"
 #include "Transport.H"
 #include "WallFunctions.H"
@@ -249,6 +250,13 @@ SprayParticleContainer::updateParticles(
 #pragma omp parallel if (Gpu::notInLaunchRegion())
 #endif
   {
+#ifndef AMREX_USE_GPU
+    std::unique_ptr<pele::physics::spray::SprayCvode> cvode_workspace;
+    if (pele::physics::spray::SprayCvode::enabled()) {
+      cvode_workspace = std::make_unique<pele::physics::spray::SprayCvode>();
+    }
+    auto* cvode = cvode_workspace.get();
+#endif
     for (MyParIter pti(*this, level); pti.isValid(); ++pti) {
       const Box tile_box = pti.tilebox();
       const Box src_box = pti.growntilebox(source_ghosts);
@@ -389,8 +397,16 @@ SprayParticleContainer::updateParticles(
               calculateFilmSource(
                 sub_dt, gpv, *fdat, p, cBoilT.data(), ltransparm);
             } else {
-              Reyn_d = calculateSpraySource(
-                sub_dt, gpv, *fdat, p, cBoilT.data(), ltransparm);
+#ifndef AMREX_USE_GPU
+              if (cvode != nullptr) {
+                Reyn_d = cvode->advance(
+                  sub_dt, gpv, *fdat, p, cBoilT.data(), ltransparm);
+              } else
+#endif
+              {
+                Reyn_d = calculateSpraySource(
+                  sub_dt, gpv, *fdat, p, cBoilT.data(), ltransparm);
+              }
             }
             IntVect cur_indx = ijkc;
             Real cvol = inv_vol;

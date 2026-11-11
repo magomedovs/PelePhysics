@@ -1,5 +1,6 @@
 
 #include "SprayParticles.H"
+#include "SprayCvode.H"
 
 using namespace amrex;
 
@@ -38,6 +39,7 @@ SprayParticleContainer::readSprayParams(int& particle_verbose)
   d_sprayData =
     static_cast<SprayData*>(amrex::The_Arena()->alloc(sizeof(SprayData)));
   ParmParse pp("particles");
+  pele::physics::spray::SprayCvode::readParameters();
   // Control the verbosity of the Particle class
   pp.query("v", particle_verbose);
   m_sprayData->verbose = particle_verbose;

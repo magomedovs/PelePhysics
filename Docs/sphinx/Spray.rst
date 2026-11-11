@@ -460,6 +460,97 @@ Spray Flags and Inputs
    +------------------------+-------------------------------+-------------+-------------------+
 
 
+Spray Time Integration
+======================
+
+``particles.integrator`` selects time integration for free droplets. The default,
+``explicit``, retains the existing Euler update and substepping. The optional
+``cvode_bdf`` method integrates velocity, temperature, and liquid component masses
+as a coupled system using CVODE BDF with Newton iteration. It supports CPU builds,
+including MPI and OpenMP. Wall films continue to use their existing integration.
+Selecting ``cvode_bdf`` in a GPU build reports an error at initialization.
+
+GNU make includes the implementation through the spray ``Make.package``.
+Downstream CMake builds with explicit source lists must additionally register
+``SprayCvode.cpp`` and the ``SprayCvode.H``/``SprayRates.H`` headers. Downstream
+PeleLMeX validation tools are provided in ``Testing/SprayCvode``.
+
+For example::
+
+   particles.integrator = cvode_bdf
+   particles.cvode.rtol = 1.e-6
+   particles.cvode.max_order = 2
+
+The following settings are independent of chemistry's ``ode.*`` and ``cvode.*``
+parameters. Absolute tolerances use the application's native units (MKS for
+PeleLMeX). The defaults below are stated in MKS.
+
+.. list-table:: CVODE particle integration options
+   :header-rows: 1
+
+   * - Parameter
+     - Default
+     - Meaning
+   * - ``particles.cvode.rtol``
+     - ``1.e-6``
+     - Relative integration tolerance
+   * - ``particles.cvode.atol_temperature``
+     - ``1.e-4`` K
+     - Absolute temperature tolerance
+   * - ``particles.cvode.atol_velocity``
+     - ``1.e-7`` m/s
+     - Absolute velocity tolerance
+   * - ``particles.cvode.atol_mass``
+     - ``1.e-21`` kg
+     - Absolute component-mass tolerance
+   * - ``particles.cvode.max_order``
+     - ``2``
+     - Maximum BDF order, between 1 and 5; order 1 is backward Euler
+   * - ``particles.cvode.max_steps``
+     - ``10000``
+     - Maximum internal steps per requested particle advance, including restarts
+
+Gas conditions remain fixed during each particle stage, as in the explicit path.
+CVODE can reduce its internal step for accuracy and nonlinear convergence; choosing
+an implicit method does not remove spatial tracking or gas-coupling timestep limits.
+Higher BDF orders can reduce work, but tolerances and timestep convergence should be
+checked for each application.
+
+Momentum and energy exchange start at zero for each particle stage. Their absolute
+error scales are derived from the initial particle mass and the particle/gas
+velocity and temperature scales, including the relative tolerance. For example,
+each momentum component uses ``m * (atol_velocity + rtol * u_ref) + dm * u_ref``,
+where ``u_ref`` is the larger absolute particle/gas velocity and
+``dm = SPRAY_FUEL_NUM * atol_mass + rtol * m``. Energy uses the analogous liquid
+heat-capacity/temperature scale and a mass-error contribution based on sensible
+energy or deposited vapor enthalpy; PeleC additionally includes kinetic-energy
+uncertainty. The accumulators remain in CVODE's error test. These scales prevent
+their zero initial values from imposing a much tighter physical accuracy than
+the particle state. State tolerances and the integrated source equations are
+unchanged. Set ``particles.cvode.max_order = 1`` to restrict BDF to backward Euler.
+
+Gas species sources follow the accepted component-mass changes. Momentum and energy
+exchange are integrated alongside the particle state, with external body force
+excluded from interphase momentum exchange. Source deposition retains the existing
+stage weights and mesh mapping. Manifold EOS retains its existing zero gas-energy
+source convention.
+
+Accepted steps enforce nonnegative component masses and positive temperature.
+Newton trial states use a nonnegative extension of liquid composition for rate
+evaluation. Tolerance-sized negative interpolation errors at depletion events
+are corrected with the corresponding exchange adjustment before restarting.
+Components that reach their depletion threshold (the smaller of the absolute mass
+tolerance and one millionth of their initial mass) are removed, and their residual mass and
+associated vapor momentum/enthalpy are transferred to the gas. The existing minimum
+particle mass remains the droplet-removal threshold. Exchange is normalized by the
+full requested stage interval, even for a droplet that disappears during that stage.
+This retains the existing residual-vaporization policy; it is not a separate boiling
+or phase-equilibrium model.
+
+One solver workspace per CPU worker is reused across particles. Checkpoints store
+the existing particle fields, without CVODE history. A failed integration reports
+the particle and CVODE status and terminates without committing a partial update.
+
 .. _SprayLiquidProperties:
 
 Liquid Spray Properties

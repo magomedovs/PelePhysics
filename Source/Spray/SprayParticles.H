@@ -283,7 +283,7 @@ public:
         actSource, tmpSource, 0, 0, actSource.nComp(), nghost); // NOLINT
     } else {
 #ifdef AMREX_USE_OMP
-#pragma omp parallel if (Gpu::notInLaunchRegion())
+#pragma omp parallel if (amrex::Gpu::notInLaunchRegion())
 #endif
       {
         for (amrex::MFIter mfi(actSource, amrex::TilingIfNotGPU());
